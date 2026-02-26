@@ -27,11 +27,17 @@ app.get('/post/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'post.html'));
 });
 
-ready.then(() => {
-  app.listen(PORT, () => {
-    console.log(`Philosophy of Things running at http://localhost:${PORT}`);
+// Local development: listen on port
+if (process.env.VERCEL !== '1') {
+  ready.then(() => {
+    app.listen(PORT, () => {
+      console.log(`Philosophy of Things running at http://localhost:${PORT}`);
+    });
+  }).catch(err => {
+    console.error('Failed to initialize database:', err);
+    process.exit(1);
   });
-}).catch(err => {
-  console.error('Failed to initialize database:', err);
-  process.exit(1);
-});
+}
+
+// Vercel serverless: export the app
+module.exports = app;
