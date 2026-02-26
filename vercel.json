@@ -12,10 +12,10 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.js" },
-    { "src": "/draft/(.*)", "dest": "/api/index.js" },
-    { "src": "/draft", "dest": "/api/index.js" },
-    { "src": "/post/(.*)", "dest": "/api/index.js" },
-    { "src": "/(.*\\.(html|css|js|svg|png|jpg|ico))", "dest": "/public/$1" },
+    { "src": "/draft/.*", "dest": "/public/draft.html" },
+    { "src": "/draft", "dest": "/public/draft.html" },
+    { "src": "/post/.*", "dest": "/public/post.html" },
+    { "src": "/(.*\\.(html|css|js|svg|png|jpg|ico|woff2?))", "dest": "/public/$1" },
     { "src": "/", "dest": "/public/index.html" }
   ]
 }
