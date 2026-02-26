@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draft — Philosophy of Things</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="page-accents">
+  <header class="topbar">
+    <a href="/" class="topbar__logo">Philosophy of Things</a>
+    <nav class="topbar__nav">
+      <a href="/">Writings</a>
+      <a href="/draft" class="topbar__cta">Start writing</a>
+    </nav>
+  </header>
+
+  <main class="container--wide">
+    <div class="draft-layout">
+      <!-- Left: Editor -->
+      <div class="draft-pane">
+        <input type="text" class="editor__title" id="title" placeholder="Title...">
+        <textarea class="editor__body" id="body" placeholder="Write your thoughts..."></textarea>
+        <div class="editor__actions">
+          <button class="btn btn--secondary" id="saveDraft">Save Draft</button>
+          <button class="btn btn--primary" id="publish">Publish</button>
+          <button class="btn btn--danger" id="deletePost" style="display:none">Delete</button>
+          <span class="editor__status" id="status"></span>
+        </div>
+      </div>
+
+      <!-- Right: Image Studio -->
+      <div class="draft-pane">
+        <div class="studio">
+          <h3 class="studio__title">Image Studio</h3>
+
+          <div class="studio__dropzone" id="dropzone">
+            <p>Drop an image here or click to upload</p>
+            <input type="file" id="fileInput" accept="image/*">
+          </div>
+
+          <div class="studio__preview" id="previewArea" style="display:none">
+            <img id="previewImg" src="" alt="Preview">
+          </div>
+
+          <div class="studio__controls">
+            <input type="text" class="studio__prompt" id="prompt" placeholder="Describe your vision...">
+            <div class="studio__mode">
+              <label><input type="radio" name="mode" value="initial" checked> Start fresh</label>
+              <label><input type="radio" name="mode" value="blend"> Blend with current</label>
+              <label><input type="radio" name="mode" value="iterate"> Iterate</label>
+            </div>
+            <div class="studio__actions">
+              <button class="btn btn--primary" id="generate">Generate</button>
+              <button class="btn btn--secondary" id="setCover">Set as Cover</button>
+              <button class="btn btn--secondary" id="uploadAnother">Upload Another</button>
+            </div>
+          </div>
+
+          <div class="studio__error" id="studioError" style="display:none"></div>
+
+          <div class="studio__gallery" id="gallery"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">Philosophy of Things</div>
+  </footer>
+
+  <script src="/js/draft.js"></script>
+</body>
+</html>
