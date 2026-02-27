@@ -55,6 +55,7 @@
               <button class="btn btn--primary" id="generate">Generate</button>
               <button class="btn btn--secondary" id="setCover">Set as Cover</button>
               <button class="btn btn--secondary" id="uploadAnother">Upload Another</button>
+              <button class="btn btn--secondary" id="binaryArt">Binary Art</button>
             </div>
           </div>
 
@@ -65,6 +66,39 @@
       </div>
     </div>
   </main>
+
+  <!-- Binary Art Modal -->
+  <div class="ascii-modal" id="asciiModal" style="display:none">
+    <div class="ascii-modal__content">
+      <div class="ascii-modal__header">
+        <h3>Binary Art</h3>
+        <button class="ascii-modal__close" id="closeAscii">&times;</button>
+      </div>
+      <div class="ascii-modal__controls">
+        <label>
+          Width: <input type="range" id="asciiWidth" min="40" max="150" value="80">
+          <span id="asciiWidthValue">80</span>
+        </label>
+        <label>
+          Characters:
+          <select id="asciiChars">
+            <option value="01">0 and 1</option>
+            <option value=".:">Dots</option>
+            <option value=" ░▒▓█">Blocks</option>
+            <option value=" .:-=+*#%@">Classic</option>
+          </select>
+        </label>
+        <label>
+          <input type="checkbox" id="asciiInvert"> Invert
+        </label>
+      </div>
+      <pre class="ascii-modal__output" id="asciiOutput"></pre>
+      <div class="ascii-modal__actions">
+        <button class="btn btn--secondary" id="copyAscii">Copy to Clipboard</button>
+        <button class="btn btn--secondary" id="downloadAscii">Download</button>
+      </div>
+    </div>
+  </div>
 
   <footer class="site-footer">
     <div class="container">Philosophy of Things</div>

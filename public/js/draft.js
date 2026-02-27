@@ -256,4 +256,127 @@ document.addEventListener('DOMContentLoaded', () => {
     statusEl.textContent = 'Cover set';
     setTimeout(() => { statusEl.textContent = ''; }, 2000);
   });
+
+  // Binary Art Feature
+  const binaryArtBtn = document.getElementById('binaryArt');
+  const asciiModal = document.getElementById('asciiModal');
+  const closeAsciiBtn = document.getElementById('closeAscii');
+  const asciiOutput = document.getElementById('asciiOutput');
+  const asciiWidthSlider = document.getElementById('asciiWidth');
+  const asciiWidthValue = document.getElementById('asciiWidthValue');
+  const asciiCharsSelect = document.getElementById('asciiChars');
+  const asciiInvertCheckbox = document.getElementById('asciiInvert');
+  const copyAsciiBtn = document.getElementById('copyAscii');
+  const downloadAsciiBtn = document.getElementById('downloadAscii');
+
+  let currentAsciiImage = null;
+
+  function imageToAscii(img, width, charSet, invert) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Calculate height to maintain aspect ratio (characters are ~2x taller than wide)
+    const aspectRatio = img.height / img.width;
+    const height = Math.floor(width * aspectRatio * 0.5);
+
+    canvas.width = width;
+    canvas.height = height;
+
+    ctx.drawImage(img, 0, 0, width, height);
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const pixels = imageData.data;
+
+    const chars = charSet.split('');
+    let ascii = '';
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const r = pixels[i];
+        const g = pixels[i + 1];
+        const b = pixels[i + 2];
+        const a = pixels[i + 3];
+
+        // Convert to grayscale
+        let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+        // Handle transparency as white
+        if (a < 128) brightness = 1;
+
+        if (invert) brightness = 1 - brightness;
+
+        // Map brightness to character
+        const charIndex = Math.floor(brightness * (chars.length - 1));
+        ascii += chars[charIndex];
+      }
+      ascii += '\n';
+    }
+
+    return ascii;
+  }
+
+  function generateAscii() {
+    if (!currentAsciiImage) return;
+
+    const width = parseInt(asciiWidthSlider.value);
+    const charSet = asciiCharsSelect.value;
+    const invert = asciiInvertCheckbox.checked;
+
+    const ascii = imageToAscii(currentAsciiImage, width, charSet, invert);
+    asciiOutput.textContent = ascii;
+  }
+
+  binaryArtBtn.addEventListener('click', () => {
+    if (!currentImagePath) {
+      showError('Select an image first');
+      return;
+    }
+
+    // Load the image
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      currentAsciiImage = img;
+      generateAscii();
+      asciiModal.style.display = '';
+    };
+    img.onerror = () => {
+      showError('Failed to load image for conversion');
+    };
+    img.src = currentImagePath;
+  });
+
+  closeAsciiBtn.addEventListener('click', () => {
+    asciiModal.style.display = 'none';
+  });
+
+  asciiModal.addEventListener('click', (e) => {
+    if (e.target === asciiModal) {
+      asciiModal.style.display = 'none';
+    }
+  });
+
+  asciiWidthSlider.addEventListener('input', () => {
+    asciiWidthValue.textContent = asciiWidthSlider.value;
+    generateAscii();
+  });
+
+  asciiCharsSelect.addEventListener('change', generateAscii);
+  asciiInvertCheckbox.addEventListener('change', generateAscii);
+
+  copyAsciiBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(asciiOutput.textContent);
+    copyAsciiBtn.textContent = 'Copied!';
+    setTimeout(() => { copyAsciiBtn.textContent = 'Copy to Clipboard'; }, 2000);
+  });
+
+  downloadAsciiBtn.addEventListener('click', () => {
+    const blob = new Blob([asciiOutput.textContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'binary-art.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
 });
