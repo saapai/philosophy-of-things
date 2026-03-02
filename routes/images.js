@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { query, queryOne, execute } = require('../db/init');
+const { supabase } = require('../db/supabase');
 
 const storage = multer.diskStorage({
   destination: path.join(__dirname, '..', 'uploads'),
@@ -24,24 +24,52 @@ const upload = multer({
   }
 });
 
-// Upload an image
-router.post('/upload', upload.single('image'), (req, res) => {
+// Middleware to get user from auth header
+async function getUser(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  const token = authHeader.split(' ')[1];
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error) return null;
+  return user;
+}
+
+// Middleware to require authentication
+async function requireAuth(req, res, next) {
+  const user = await getUser(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  req.user = user;
+  next();
+}
+
+// Upload an image (requires auth)
+router.post('/upload', requireAuth, upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No valid image file provided' });
 
   const postId = req.body.post_id ? parseInt(req.body.post_id) : null;
   const filePath = '/uploads/' + req.file.filename;
 
-  const result = execute(
-    `INSERT INTO images (post_id, file_path, mode) VALUES (?, ?, 'initial')`,
-    [postId, filePath]
-  );
+  const { data: image, error } = await supabase
+    .from('images')
+    .insert({
+      user_id: req.user.id,
+      post_id: postId,
+      file_path: filePath,
+      mode: 'initial'
+    })
+    .select()
+    .single();
 
-  const image = queryOne('SELECT * FROM images WHERE id = ?', [result.lastInsertRowid]);
+  if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(image);
 });
 
-// Generate AI image
-router.post('/generate', async (req, res) => {
+// Generate AI image (requires auth)
+router.post('/generate', requireAuth, async (req, res) => {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || apiKey === 'your_key_here') {
     return res.status(422).json({
@@ -62,8 +90,15 @@ router.post('/generate', async (req, res) => {
     let result;
 
     if (image_id && (mode === 'blend' || mode === 'iterate')) {
-      const parentImage = queryOne('SELECT * FROM images WHERE id = ?', [parseInt(image_id)]);
-      if (!parentImage) return res.status(404).json({ error: 'Parent image not found' });
+      const { data: parentImage, error: fetchError } = await supabase
+        .from('images')
+        .select('*')
+        .eq('id', parseInt(image_id))
+        .single();
+
+      if (fetchError || !parentImage) {
+        return res.status(404).json({ error: 'Parent image not found' });
+      }
 
       const imagePath = path.join(__dirname, '..', parentImage.file_path);
       result = await openai.images.edit({
@@ -89,18 +124,21 @@ router.post('/generate', async (req, res) => {
     fs.writeFileSync(savePath, buffer);
 
     const filePath = '/uploads/' + filename;
-    const dbResult = execute(
-      `INSERT INTO images (post_id, file_path, prompt, parent_image_id, mode) VALUES (?, ?, ?, ?, ?)`,
-      [
-        post_id ? parseInt(post_id) : null,
-        filePath,
-        prompt,
-        image_id ? parseInt(image_id) : null,
-        mode || 'initial'
-      ]
-    );
 
-    const image = queryOne('SELECT * FROM images WHERE id = ?', [dbResult.lastInsertRowid]);
+    const { data: image, error } = await supabase
+      .from('images')
+      .insert({
+        user_id: req.user.id,
+        post_id: post_id ? parseInt(post_id) : null,
+        file_path: filePath,
+        prompt: prompt,
+        parent_image_id: image_id ? parseInt(image_id) : null,
+        mode: mode || 'initial'
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
     res.status(201).json(image);
   } catch (err) {
     console.error('Image generation error:', err.message);
@@ -108,12 +146,15 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-// List images for a post
-router.get('/:postId', (req, res) => {
-  const images = query(
-    `SELECT * FROM images WHERE post_id = ? ORDER BY created_at ASC`,
-    [parseInt(req.params.postId)]
-  );
+// List images for a post (public for viewing posts)
+router.get('/:postId', async (req, res) => {
+  const { data: images, error } = await supabase
+    .from('images')
+    .select('*')
+    .eq('post_id', parseInt(req.params.postId))
+    .order('created_at', { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
   res.json(images);
 });
 

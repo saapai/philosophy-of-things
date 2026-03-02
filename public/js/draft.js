@@ -1,4 +1,43 @@
-document.addEventListener('DOMContentLoaded', () => {
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const supabaseUrl = 'https://ygcorlazwxovaqoiktgd.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlnY29ybGF6d3hvdmFxb2lrdGdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzE2OTIsImV4cCI6MjA4ODA0NzY5Mn0.aIx1HEHq6eMLDjMJpK-GVEI40oQ6I0ZwiUXmTGSHplc';
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+let accessToken = null;
+
+// Check authentication on load
+async function checkAuth() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    window.location.href = '/login';
+    return false;
+  }
+  accessToken = session.access_token;
+  return true;
+}
+
+// Helper to make authenticated requests
+async function authFetch(url, options = {}) {
+  if (!accessToken) {
+    const { data: { session } } = await supabase.auth.getSession();
+    accessToken = session?.access_token;
+  }
+
+  const headers = {
+    ...options.headers,
+    'Authorization': `Bearer ${accessToken}`
+  };
+
+  return fetch(url, { ...options, headers });
+}
+
+// Initialize the app
+async function init() {
+  const isAuthenticated = await checkAuth();
+  if (!isAuthenticated) return;
+
   const titleEl = document.getElementById('title');
   const bodyEl = document.getElementById('body');
   const saveDraftBtn = document.getElementById('saveDraft');
@@ -34,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadPost(id) {
     try {
-      const res = await fetch(`/api/posts/${id}`);
+      const res = await authFetch(`/api/posts/${id}`);
       if (!res.ok) return;
       const post = await res.json();
       titleEl.value = post.title || '';
@@ -110,17 +149,23 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       let res;
       if (postId) {
-        res = await fetch(`/api/posts/${postId}`, {
+        res = await authFetch(`/api/posts/${postId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
       } else {
-        res = await fetch('/api/posts', {
+        res = await authFetch('/api/posts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+      }
+
+      if (!res.ok) {
+        const error = await res.json();
+        statusEl.textContent = error.error || 'Save failed';
+        return;
       }
 
       const post = await res.json();
@@ -153,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
   deleteBtn.addEventListener('click', async () => {
     if (!postId) return;
     if (!confirm('Delete this post?')) return;
-    await fetch(`/api/posts/${postId}`, { method: 'DELETE' });
+    await authFetch(`/api/posts/${postId}`, { method: 'DELETE' });
     window.location.href = '/';
   });
 
@@ -189,7 +234,12 @@ document.addEventListener('DOMContentLoaded', () => {
     form.append('post_id', postId);
 
     try {
-      const res = await fetch('/api/images/upload', { method: 'POST', body: form });
+      const res = await authFetch('/api/images/upload', { method: 'POST', body: form });
+      if (!res.ok) {
+        const error = await res.json();
+        showError(error.error || 'Upload failed');
+        return;
+      }
       const image = await res.json();
       currentImageId = image.id;
       currentImagePath = image.file_path;
@@ -218,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
     generateBtn.innerHTML = '<span class="spinner"></span>';
 
     try {
-      const res = await fetch('/api/images/generate', {
+      const res = await authFetch('/api/images/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -379,4 +429,14 @@ document.addEventListener('DOMContentLoaded', () => {
     a.click();
     URL.revokeObjectURL(url);
   });
+}
+
+// Logout handler
+document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+  e.preventDefault();
+  await supabase.auth.signOut();
+  window.location.href = '/';
 });
+
+// Start the app
+init();

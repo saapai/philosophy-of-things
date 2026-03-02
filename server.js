@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
-const { ready } = require('./db/init');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +14,12 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/posts', require('./routes/posts'));
 app.use('/api/images', require('./routes/images'));
 
+// Auth page
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Draft editor (auth check happens client-side)
 app.get('/draft', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'draft.html'));
 });
@@ -23,19 +28,15 @@ app.get('/draft/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'draft.html'));
 });
 
+// View post
 app.get('/post/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'post.html'));
 });
 
 // Local development: listen on port
 if (process.env.VERCEL !== '1') {
-  ready.then(() => {
-    app.listen(PORT, () => {
-      console.log(`Philosophy of Things running at http://localhost:${PORT}`);
-    });
-  }).catch(err => {
-    console.error('Failed to initialize database:', err);
-    process.exit(1);
+  app.listen(PORT, () => {
+    console.log(`Philosophy of Things running at http://localhost:${PORT}`);
   });
 }
 
