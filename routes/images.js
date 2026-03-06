@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { execFileSync } = require('child_process');
 const { supabase } = require('../db/supabase');
 
 const storage = multer.diskStorage({
@@ -102,23 +103,28 @@ router.post('/generate', requireAuth, async (req, res) => {
 
       const imagePath = path.join(__dirname, '..', parentImage.file_path);
       result = await openai.images.edit({
+        model: 'gpt-image-1',
         image: fs.createReadStream(imagePath),
         prompt: fullPrompt,
-        n: 1,
-        size: '1024x1024'
       });
     } else {
       result = await openai.images.generate({
+        model: 'gpt-image-1',
         prompt: fullPrompt,
-        n: 1,
         size: '1024x1024'
       });
     }
 
-    const imageUrl = result.data[0].url;
-
-    const response = await fetch(imageUrl);
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const imageData = result.data[0];
+    let buffer;
+    if (imageData.url) {
+      const response = await fetch(imageData.url);
+      buffer = Buffer.from(await response.arrayBuffer());
+    } else if (imageData.b64_json) {
+      buffer = Buffer.from(imageData.b64_json, 'base64');
+    } else {
+      throw new Error('No image data in API response');
+    }
     const filename = Date.now() + '-ai-' + Math.round(Math.random() * 1e6) + '.png';
     const savePath = path.join(__dirname, '..', 'uploads', filename);
     fs.writeFileSync(savePath, buffer);
@@ -143,6 +149,122 @@ router.post('/generate', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Image generation error:', err.message);
     res.status(500).json({ error: 'Image generation failed: ' + err.message });
+  }
+});
+
+// Apply painterly filter (requires auth)
+router.post('/filter', requireAuth, async (req, res) => {
+  try {
+    const { image_id, style, post_id } = req.body;
+
+    const validStyles = ['oil', 'icm', 'hybrid'];
+    if (!image_id || !validStyles.includes(style)) {
+      return res.status(400).json({ error: 'Valid image_id and style (oil, icm, hybrid) required' });
+    }
+
+    const { data: sourceImage, error: fetchError } = await supabase
+      .from('images')
+      .select('*')
+      .eq('id', parseInt(image_id))
+      .single();
+
+    if (fetchError || !sourceImage) return res.status(404).json({ error: 'Source image not found' });
+
+    const inputPath = path.join(__dirname, '..', sourceImage.file_path);
+    if (!fs.existsSync(inputPath)) {
+      return res.status(404).json({ error: 'Source image file not found on disk' });
+    }
+
+    const outputFilename = Date.now() + '-' + style + '-' + Math.round(Math.random() * 1e6) + '.jpg';
+    const outputPath = path.join(__dirname, '..', 'uploads', outputFilename);
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'painterly.py');
+
+    execFileSync('python3', [scriptPath, inputPath, outputPath, style], {
+      timeout: 30000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    const filePath = '/uploads/' + outputFilename;
+
+    const { data: image, error } = await supabase
+      .from('images')
+      .insert({
+        user_id: req.user.id,
+        post_id: post_id ? parseInt(post_id) : null,
+        file_path: filePath,
+        prompt: 'filter:' + style,
+        parent_image_id: parseInt(image_id),
+        mode: 'initial'
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.status(201).json(image);
+  } catch (err) {
+    console.error('Filter error:', err.message);
+    res.status(500).json({ error: 'Filter processing failed: ' + err.message });
+  }
+});
+
+// Blend two images (requires auth)
+router.post('/blend', requireAuth, async (req, res) => {
+  try {
+    const { image_id_1, image_id_2, post_id } = req.body;
+
+    if (!image_id_1 || !image_id_2) {
+      return res.status(400).json({ error: 'Two image IDs required' });
+    }
+
+    const { data: img1, error: err1 } = await supabase
+      .from('images')
+      .select('*')
+      .eq('id', parseInt(image_id_1))
+      .single();
+
+    const { data: img2, error: err2 } = await supabase
+      .from('images')
+      .select('*')
+      .eq('id', parseInt(image_id_2))
+      .single();
+
+    if (err1 || err2 || !img1 || !img2) return res.status(404).json({ error: 'Image not found' });
+
+    const inputPath1 = path.join(__dirname, '..', img1.file_path);
+    const inputPath2 = path.join(__dirname, '..', img2.file_path);
+    if (!fs.existsSync(inputPath1) || !fs.existsSync(inputPath2)) {
+      return res.status(404).json({ error: 'Image file not found on disk' });
+    }
+
+    const outputFilename = Date.now() + '-blend-' + Math.round(Math.random() * 1e6) + '.jpg';
+    const outputPath = path.join(__dirname, '..', 'uploads', outputFilename);
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'painterly.py');
+
+    execFileSync('python3', [scriptPath, inputPath1, inputPath2, outputPath, 'blend'], {
+      timeout: 30000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    const filePath = '/uploads/' + outputFilename;
+
+    const { data: image, error } = await supabase
+      .from('images')
+      .insert({
+        user_id: req.user.id,
+        post_id: post_id ? parseInt(post_id) : null,
+        file_path: filePath,
+        prompt: 'blend:' + image_id_1 + '+' + image_id_2,
+        parent_image_id: parseInt(image_id_1),
+        mode: 'initial'
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.status(201).json(image);
+  } catch (err) {
+    console.error('Blend error:', err.message);
+    res.status(500).json({ error: 'Blend failed: ' + err.message });
   }
 });
 

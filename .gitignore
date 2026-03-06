@@ -3,3 +3,4 @@ node_modules/
 db/polished.db
 uploads/*
 !uploads/.gitkeep
+.vercel

@@ -731,6 +731,60 @@ body {
   box-shadow: var(--glow-red);
 }
 
+.studio__gallery-item.dragging {
+  opacity: 0.5;
+  border-color: var(--ink-mid);
+}
+
+.studio__gallery-item.drop-target {
+  border-color: var(--neon-blue);
+  box-shadow: var(--glow-blue);
+  transform: scale(1.1);
+}
+
+/* Filter Buttons */
+.studio__filters {
+  margin-top: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.studio__filters-label {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-light);
+  margin-bottom: 8px;
+}
+
+.studio__filters-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn--filter {
+  background: transparent;
+  color: var(--ink-mid);
+  border: 1px solid var(--rule);
+  font-size: 12px;
+  padding: 7px 16px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+
+.btn--filter:hover {
+  border-color: var(--neon-blue);
+  color: var(--neon-blue);
+  background: rgba(27, 77, 255, 0.03);
+}
+
+.btn--filter:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .studio__error {
   font-size: 14px;
   color: var(--neon-red);
