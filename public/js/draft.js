@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const uploadAnotherBtn = document.getElementById('uploadAnother');
   const galleryEl = document.getElementById('gallery');
   const studioError = document.getElementById('studioError');
+  const filterArea = document.getElementById('filterArea');
 
   let postId = null;
   let currentImageId = null;
@@ -61,14 +62,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  let dragSourceId = null;
+
   function renderGallery(images) {
     galleryEl.innerHTML = images.map(img => `
       <img class="studio__gallery-item ${img.file_path === currentImagePath ? 'selected' : ''}"
            src="${img.file_path}" alt=""
-           data-id="${img.id}" data-path="${img.file_path}">
+           data-id="${img.id}" data-path="${img.file_path}"
+           draggable="true">
     `).join('');
 
     galleryEl.querySelectorAll('.studio__gallery-item').forEach(el => {
+      // Click to select
       el.addEventListener('click', () => {
         currentImageId = parseInt(el.dataset.id);
         currentImagePath = el.dataset.path;
@@ -76,12 +81,81 @@ document.addEventListener('DOMContentLoaded', () => {
         galleryEl.querySelectorAll('.studio__gallery-item').forEach(g => g.classList.remove('selected'));
         el.classList.add('selected');
       });
+
+      // Drag start
+      el.addEventListener('dragstart', (e) => {
+        dragSourceId = el.dataset.id;
+        el.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+
+      el.addEventListener('dragend', () => {
+        el.classList.remove('dragging');
+        galleryEl.querySelectorAll('.studio__gallery-item').forEach(g => g.classList.remove('drop-target'));
+      });
+
+      // Drop target
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (dragSourceId && dragSourceId !== el.dataset.id) {
+          el.classList.add('drop-target');
+          e.dataTransfer.dropEffect = 'copy';
+        }
+      });
+
+      el.addEventListener('dragleave', () => {
+        el.classList.remove('drop-target');
+      });
+
+      el.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        el.classList.remove('drop-target');
+        const targetId = el.dataset.id;
+        if (!dragSourceId || dragSourceId === targetId) return;
+        await blendImages(parseInt(dragSourceId), parseInt(targetId));
+        dragSourceId = null;
+      });
     });
+  }
+
+  async function blendImages(id1, id2) {
+    hideError();
+    if (!postId) await savePost('draft', true);
+
+    statusEl.textContent = 'Blending...';
+
+    try {
+      const res = await fetch('/api/images/blend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_id_1: id1,
+          image_id_2: id2,
+          post_id: postId
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        showError(data.error);
+        return;
+      }
+
+      currentImageId = data.id;
+      currentImagePath = data.file_path;
+      showPreview(data.file_path);
+      loadImages(postId);
+      statusEl.textContent = 'Blended!';
+      setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    } catch (err) {
+      showError('Blend failed');
+    }
   }
 
   function showPreview(src) {
     previewImg.src = src;
     previewArea.style.display = '';
+    filterArea.style.display = '';
   }
 
   function hideError() {
@@ -246,6 +320,52 @@ document.addEventListener('DOMContentLoaded', () => {
       generateBtn.disabled = false;
       generateBtn.textContent = 'Generate';
     }
+  });
+
+  // Painterly filter buttons
+  document.querySelectorAll('.btn--filter').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!currentImageId) {
+        showError('Select an image first');
+        return;
+      }
+
+      hideError();
+      if (!postId) await savePost('draft', true);
+
+      const style = btn.dataset.style;
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+
+      try {
+        const res = await fetch('/api/images/filter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image_id: currentImageId,
+            style,
+            post_id: postId
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          showError(data.error);
+          return;
+        }
+
+        currentImageId = data.id;
+        currentImagePath = data.file_path;
+        showPreview(data.file_path);
+        loadImages(postId);
+      } catch (err) {
+        showError('Filter failed');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    });
   });
 
   // Set as cover
