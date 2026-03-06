@@ -12,7 +12,8 @@
     <a href="/" class="topbar__logo">Philosophy of Things</a>
     <nav class="topbar__nav">
       <a href="/">Writings</a>
-      <a href="/draft" class="topbar__cta">Start writing</a>
+      <a href="/draft" class="topbar__cta" id="startWritingBtn">Start writing</a>
+      <a href="#" class="topbar__link" id="logoutBtn" style="display:none">Log out</a>
     </nav>
   </header>
 
@@ -22,7 +23,7 @@
       <h1 class="hero__heading">Share a thought<br>with the world.</h1>
       <h2 class="hero__subheading"><em>Remember everything.</em></h2>
       <p class="hero__body">A place for essays, fragments, and the things<br>that stay with you long after you think them.</p>
-      <a href="/draft" class="hero__button">Start writing</a>
+      <a href="/draft" class="hero__button" id="heroBtn">Start writing</a>
       <p class="hero__author">by Yashashidara Pai</p>
     </div>
   </div>
@@ -31,12 +32,61 @@
     <div class="feed" id="feed"></div>
   </main>
 
-  <a href="/draft" class="fab" title="New Draft">+</a>
+  <a href="/draft" class="fab" title="New Draft" id="fabBtn">+</a>
 
   <footer class="site-footer">
     <div class="container">Philosophy of Things</div>
   </footer>
 
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const supabaseUrl = 'https://ygcorlazwxovaqoiktgd.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlnY29ybGF6d3hvdmFxb2lrdGdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzE2OTIsImV4cCI6MjA4ODA0NzY5Mn0.aIx1HEHq6eMLDjMJpK-GVEI40oQ6I0ZwiUXmTGSHplc';
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const startWritingBtn = document.getElementById('startWritingBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const heroBtn = document.getElementById('heroBtn');
+    const fabBtn = document.getElementById('fabBtn');
+
+    let isLoggedIn = false;
+
+    async function checkAuth() {
+      const { data: { session } } = await supabase.auth.getSession();
+      isLoggedIn = !!session;
+
+      if (isLoggedIn) {
+        logoutBtn.style.display = '';
+      } else {
+        logoutBtn.style.display = 'none';
+      }
+    }
+
+    // Handle Start Writing click - check auth first
+    function handleStartWriting(e) {
+      if (!isLoggedIn) {
+        e.preventDefault();
+        window.location.href = '/login';
+      }
+      // If logged in, let the default href="/draft" work
+    }
+
+    startWritingBtn.addEventListener('click', handleStartWriting);
+    heroBtn.addEventListener('click', handleStartWriting);
+    fabBtn.addEventListener('click', handleStartWriting);
+
+    // Handle logout
+    logoutBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await supabase.auth.signOut();
+      isLoggedIn = false;
+      logoutBtn.style.display = 'none';
+    });
+
+    checkAuth();
+  </script>
   <script src="/js/explore.js"></script>
 </body>
 </html>

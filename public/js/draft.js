@@ -1,4 +1,43 @@
-document.addEventListener('DOMContentLoaded', () => {
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const supabaseUrl = 'https://ygcorlazwxovaqoiktgd.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlnY29ybGF6d3hvdmFxb2lrdGdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzE2OTIsImV4cCI6MjA4ODA0NzY5Mn0.aIx1HEHq6eMLDjMJpK-GVEI40oQ6I0ZwiUXmTGSHplc';
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+let accessToken = null;
+
+// Check authentication on load
+async function checkAuth() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    window.location.href = '/login';
+    return false;
+  }
+  accessToken = session.access_token;
+  return true;
+}
+
+// Helper to make authenticated requests
+async function authFetch(url, options = {}) {
+  if (!accessToken) {
+    const { data: { session } } = await supabase.auth.getSession();
+    accessToken = session?.access_token;
+  }
+
+  const headers = {
+    ...options.headers,
+    'Authorization': `Bearer ${accessToken}`
+  };
+
+  return fetch(url, { ...options, headers });
+}
+
+// Initialize the app
+async function init() {
+  const isAuthenticated = await checkAuth();
+  if (!isAuthenticated) return;
+
   const titleEl = document.getElementById('title');
   const bodyEl = document.getElementById('body');
   const saveDraftBtn = document.getElementById('saveDraft');
@@ -35,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadPost(id) {
     try {
-      const res = await fetch(`/api/posts/${id}`);
+      const res = await authFetch(`/api/posts/${id}`);
       if (!res.ok) return;
       const post = await res.json();
       titleEl.value = post.title || '';
@@ -125,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
     statusEl.textContent = 'Blending...';
 
     try {
-      const res = await fetch('/api/images/blend', {
+      const res = await authFetch('/api/images/blend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -184,17 +223,23 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       let res;
       if (postId) {
-        res = await fetch(`/api/posts/${postId}`, {
+        res = await authFetch(`/api/posts/${postId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
       } else {
-        res = await fetch('/api/posts', {
+        res = await authFetch('/api/posts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+      }
+
+      if (!res.ok) {
+        const error = await res.json();
+        statusEl.textContent = error.error || 'Save failed';
+        return;
       }
 
       const post = await res.json();
@@ -227,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
   deleteBtn.addEventListener('click', async () => {
     if (!postId) return;
     if (!confirm('Delete this post?')) return;
-    await fetch(`/api/posts/${postId}`, { method: 'DELETE' });
+    await authFetch(`/api/posts/${postId}`, { method: 'DELETE' });
     window.location.href = '/';
   });
 
@@ -263,7 +308,12 @@ document.addEventListener('DOMContentLoaded', () => {
     form.append('post_id', postId);
 
     try {
-      const res = await fetch('/api/images/upload', { method: 'POST', body: form });
+      const res = await authFetch('/api/images/upload', { method: 'POST', body: form });
+      if (!res.ok) {
+        const error = await res.json();
+        showError(error.error || 'Upload failed');
+        return;
+      }
       const image = await res.json();
       currentImageId = image.id;
       currentImagePath = image.file_path;
@@ -292,7 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
     generateBtn.innerHTML = '<span class="spinner"></span>';
 
     try {
-      const res = await fetch('/api/images/generate', {
+      const res = await authFetch('/api/images/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -339,7 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.innerHTML = '<span class="spinner"></span>';
 
       try {
-        const res = await fetch('/api/images/filter', {
+        const res = await authFetch('/api/images/filter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -376,4 +426,137 @@ document.addEventListener('DOMContentLoaded', () => {
     statusEl.textContent = 'Cover set';
     setTimeout(() => { statusEl.textContent = ''; }, 2000);
   });
+
+  // Binary Art Feature
+  const binaryArtBtn = document.getElementById('binaryArt');
+  const asciiModal = document.getElementById('asciiModal');
+  const closeAsciiBtn = document.getElementById('closeAscii');
+  const asciiOutput = document.getElementById('asciiOutput');
+  const asciiWidthSlider = document.getElementById('asciiWidth');
+  const asciiWidthValue = document.getElementById('asciiWidthValue');
+  const asciiCharsSelect = document.getElementById('asciiChars');
+  const asciiInvertCheckbox = document.getElementById('asciiInvert');
+  const copyAsciiBtn = document.getElementById('copyAscii');
+  const downloadAsciiBtn = document.getElementById('downloadAscii');
+
+  let currentAsciiImage = null;
+
+  function imageToAscii(img, width, charSet, invert) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Calculate height to maintain aspect ratio (characters are ~2x taller than wide)
+    const aspectRatio = img.height / img.width;
+    const height = Math.floor(width * aspectRatio * 0.5);
+
+    canvas.width = width;
+    canvas.height = height;
+
+    ctx.drawImage(img, 0, 0, width, height);
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const pixels = imageData.data;
+
+    const chars = charSet.split('');
+    let ascii = '';
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const r = pixels[i];
+        const g = pixels[i + 1];
+        const b = pixels[i + 2];
+        const a = pixels[i + 3];
+
+        // Convert to grayscale
+        let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+        // Handle transparency as white
+        if (a < 128) brightness = 1;
+
+        if (invert) brightness = 1 - brightness;
+
+        // Map brightness to character
+        const charIndex = Math.floor(brightness * (chars.length - 1));
+        ascii += chars[charIndex];
+      }
+      ascii += '\n';
+    }
+
+    return ascii;
+  }
+
+  function generateAscii() {
+    if (!currentAsciiImage) return;
+
+    const width = parseInt(asciiWidthSlider.value);
+    const charSet = asciiCharsSelect.value;
+    const invert = asciiInvertCheckbox.checked;
+
+    const ascii = imageToAscii(currentAsciiImage, width, charSet, invert);
+    asciiOutput.textContent = ascii;
+  }
+
+  binaryArtBtn.addEventListener('click', () => {
+    if (!currentImagePath) {
+      showError('Select an image first');
+      return;
+    }
+
+    // Load the image
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      currentAsciiImage = img;
+      generateAscii();
+      asciiModal.style.display = '';
+    };
+    img.onerror = () => {
+      showError('Failed to load image for conversion');
+    };
+    img.src = currentImagePath;
+  });
+
+  closeAsciiBtn.addEventListener('click', () => {
+    asciiModal.style.display = 'none';
+  });
+
+  asciiModal.addEventListener('click', (e) => {
+    if (e.target === asciiModal) {
+      asciiModal.style.display = 'none';
+    }
+  });
+
+  asciiWidthSlider.addEventListener('input', () => {
+    asciiWidthValue.textContent = asciiWidthSlider.value;
+    generateAscii();
+  });
+
+  asciiCharsSelect.addEventListener('change', generateAscii);
+  asciiInvertCheckbox.addEventListener('change', generateAscii);
+
+  copyAsciiBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(asciiOutput.textContent);
+    copyAsciiBtn.textContent = 'Copied!';
+    setTimeout(() => { copyAsciiBtn.textContent = 'Copy to Clipboard'; }, 2000);
+  });
+
+  downloadAsciiBtn.addEventListener('click', () => {
+    const blob = new Blob([asciiOutput.textContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'binary-art.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
+// Logout handler
+document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+  e.preventDefault();
+  await supabase.auth.signOut();
+  window.location.href = '/';
 });
+
+// Start the app
+init();
